@@ -1,0 +1,119 @@
+data:
+  FUNCTIONS_WORKER_RUNTIME: cHl0aG9u
+  AzureWebJobsStorage: ''
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hello
+---
+data:
+  host.master: bXNtbXVDSHdGWnhJT1ViU0hYdlQxZjdobW5YVjkvdmhrVXJHV0VOaDBVRWxlQ1JpdjFSZmpBPT0=
+  host.function.default: NkFQV0ZEU0FuWTlDVWJpOVl4RmU4b1JTR3FYL0RmcWFxenIyM0lsYmp4N1pxSldPMXZnZE53PT0=
+  host.systemKey.default: QzNUNWhhRGdQQmhUZ3NoY3FSdHl5c0d3b1QvOXFpWFJvSzhleHptbHBzMEFhN1VLZnpaa2R3PT0=
+  functions.hello.default: TGJwRnduSUFSTlc5OHM2U05hTWZPMTRXbHRma1k1M1RzSGp4QmRkUHJSWlFoMVhxWmtrVXZ3PT0=
+apiVersion: v1
+kind: Secret
+metadata:
+  name: func-keys-kube-secret-hello
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hello-function-keys-identity-svc-act
+---
+rules:
+- apiGroups:
+  - ''
+  resources:
+  - secrets
+  - configMaps
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: functions-keys-manager-role
+---
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: functions-keys-manager-role
+subjects:
+- kind: ServiceAccount
+  name: hello-function-keys-identity-svc-act
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hello-function-keys-identity-svc-act-functions-keys-manager-rolebinding
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-http
+spec:
+  selector:
+    app: hello-http
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-http
+  labels:
+    app: hello-http
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-http
+  template:
+    metadata:
+      labels:
+        app: hello-http
+    spec:
+      containers:
+      - name: hello-http
+        image: mstip.azurecr.io/azfunc/hello:v2
+        ports:
+        - containerPort: 80
+        env:
+        - name: AzureFunctionsJobHost__functions__0
+          value: hello
+        - name: AzureWebJobsSecretStorageType
+          value: kubernetes
+        - name: AzureWebJobsKubernetesSecretName
+          value: secrets/func-keys-kube-secret-hello
+        envFrom:
+        - secretRef:
+            name: hello
+        readinessProbe:
+          failureThreshold: 3
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 240
+          httpGet:
+            path: /
+            port: 80
+            scheme: HTTP
+        startupProbe:
+          failureThreshold: 3
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 240
+          httpGet:
+            path: /
+            port: 80
+            scheme: HTTP
+      serviceAccountName: hello-function-keys-identity-svc-act
+---
+
